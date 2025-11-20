@@ -3,13 +3,13 @@ import { describe, it, expect } from "vitest";
 import { Obs, SafeToLog, SafeToLogError } from "../index";
 
 class MyArg implements SafeToLog<string> {
-  constructor(public value: string) {}
+  constructor(public readonly value: string) {}
 
   toLogSafeString = () => `MyArg(${this.value})`;
 }
 
 class MyError extends Error implements SafeToLogError {
-  constructor(public value: unknown) {
+  constructor(public readonly value: unknown) {
     super(`MyError(${value})`);
   }
 

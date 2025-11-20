@@ -14,7 +14,7 @@ npm install observe-ts effect
 
 By accumulating log data and buffering in memory,
 it provides increased control and intelligence around
-how logs are written.
+how logs and traces are written.
 
 For example, default behavior is to emit info and
 up for a given program evaluation (Obs.toPromise)
@@ -50,7 +50,7 @@ import { Effect, LogLevel, pipe } from "effect";
 import { Obs, SafeToLog, SafeToLogError } from "observe-ts";
 
 class RenderError extends Error implements SafeToLogError {
-  constructor(readonly value: unknown) {
+  constructor(public readonly value: unknown) {
     super(`RenderError(${value})`);
   }
 
@@ -59,7 +59,7 @@ class RenderError extends Error implements SafeToLogError {
 }
 
 class ApiUrl implements SafeToLog<string> {
-  constructor(readonly value: string) {}
+  constructor(public readonly value: string) {}
 
   // domain types can control exactly how they appear in logs
   toLogSafeString = () => `ApiUrl(${this.value})`;
