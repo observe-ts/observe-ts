@@ -1,0 +1,58 @@
+{
+  "name": "observe-ts",
+  "version": "0.1.0",
+  "description": "Deps, errors, logs, traces all tracked for all code",
+  "license": "MIT",
+  "repository": {
+    "type": "git"
+  },
+  "bugs": {},
+  "keywords": [
+    "effect",
+    "effect-ts",
+    "functional-programming",
+    "typescript",
+    "library"
+  ],
+  "sideEffects": false,
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.cjs"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "clean": "rimraf dist",
+    "dev": "tsup --watch",
+    "test": "vitest",
+    "typecheck": "tsc --noEmit"
+  },
+  "peerDependencies": {
+    "effect": "^3.19.5"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.30",
+    "effect": "^3.19.5",
+    "tsup": "^8.0.1",
+    "tsx": "^4.7.0",
+    "typescript": "^5.4.5",
+    "vitest": "^1.6.0",
+    "rimraf": "^5.0.5"
+  },
+  "engines": {
+    "node": ">=18.17"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}
