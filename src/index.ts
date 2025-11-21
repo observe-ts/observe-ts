@@ -11,16 +11,16 @@ import {
   Logger,
 } from "effect";
 
-export type FmtLogData = Omit<LogData, "level"> & {
+export type FmtLogData = Omit<ObserveLogData, "level"> & {
   level: string;
 };
 
-const fmtLogData = (data: LogData): FmtLogData => ({
+const fmtLogData = (data: ObserveLogData): FmtLogData => ({
   ...data,
   level: data.level.label,
 });
 
-const toLogData = <A>(logged: Logged<A>): LogData => ({
+const toLogData = <A>(logged: Observed<A>): ObserveLogData => ({
   ...logged.logData,
   aux: {
     arg: logged.value.toLogSafeString(),
@@ -28,21 +28,28 @@ const toLogData = <A>(logged: Logged<A>): LogData => ({
   },
 });
 
-export class LoggingConfig {
+export class ObserveLoggingConfig {
   private type: "LoggingConfig" = "LoggingConfig";
 
   constructor(
-    public autoFlush: (logs: LogStateData) => boolean,
-    public flush: (logs: LogStateData) => Effect.Effect<void, never, never>,
-    public filter: (config: LoggingConfig, logs: LogStateData) => LogStateData,
+    public autoFlush: (logs: ObserveLogStateData) => boolean,
+    public flush: (
+      logs: ObserveLogStateData
+    ) => Effect.Effect<void, never, never>,
+    public filter: (
+      config: ObserveLoggingConfig,
+      logs: ObserveLogStateData
+    ) => ObserveLogStateData,
     public minLevel: LogLevel.LogLevel,
     public configureEffect: <A, E, R>(
       effect: Effect.Effect<A, E, R>
     ) => Effect.Effect<A, E, R>
   ) {}
 
-  withAutoFlush = (autoFlush: (logs: LogStateData) => boolean): LoggingConfig =>
-    new LoggingConfig(
+  withAutoFlush = (
+    autoFlush: (logs: ObserveLogStateData) => boolean
+  ): ObserveLoggingConfig =>
+    new ObserveLoggingConfig(
       autoFlush,
       this.flush,
       this.filter,
@@ -51,9 +58,9 @@ export class LoggingConfig {
     );
 
   withFlush = (
-    flush: (logs: LogStateData) => Effect.Effect<void, never, never>
-  ): LoggingConfig =>
-    new LoggingConfig(
+    flush: (logs: ObserveLogStateData) => Effect.Effect<void, never, never>
+  ): ObserveLoggingConfig =>
+    new ObserveLoggingConfig(
       this.autoFlush,
       flush,
       this.filter,
@@ -62,9 +69,12 @@ export class LoggingConfig {
     );
 
   withFilter = (
-    filter: (config: LoggingConfig, logs: LogStateData) => LogStateData
-  ): LoggingConfig =>
-    new LoggingConfig(
+    filter: (
+      config: ObserveLoggingConfig,
+      logs: ObserveLogStateData
+    ) => ObserveLogStateData
+  ): ObserveLoggingConfig =>
+    new ObserveLoggingConfig(
       this.autoFlush,
       this.flush,
       filter,
@@ -72,8 +82,8 @@ export class LoggingConfig {
       this.configureEffect
     );
 
-  withMinLevel = (minLevel: LogLevel.LogLevel): LoggingConfig =>
-    new LoggingConfig(
+  withMinLevel = (minLevel: LogLevel.LogLevel): ObserveLoggingConfig =>
+    new ObserveLoggingConfig(
       this.autoFlush,
       this.flush,
       this.filter,
@@ -85,8 +95,8 @@ export class LoggingConfig {
     configureEffect: <A, E, R>(
       effect: Effect.Effect<A, E, R>
     ) => Effect.Effect<A, E, R>
-  ): LoggingConfig =>
-    new LoggingConfig(
+  ): ObserveLoggingConfig =>
+    new ObserveLoggingConfig(
       this.autoFlush,
       this.flush,
       this.filter,
@@ -95,9 +105,9 @@ export class LoggingConfig {
     );
 
   static flushAllOnError = (
-    config: LoggingConfig,
-    logState: LogStateData
-  ): LogStateData =>
+    config: ObserveLoggingConfig,
+    logState: ObserveLogStateData
+  ): ObserveLogStateData =>
     Array.findFirst(logState.logs, log => log.level === LogLevel.Error).pipe(
       Option.match({
         onNone: () =>
@@ -110,39 +120,42 @@ export class LoggingConfig {
       logs => ({ ...logState, logs })
     );
 
-  static default = (): LoggingConfig =>
-    new LoggingConfig(
+  static default = (): ObserveLoggingConfig =>
+    new ObserveLoggingConfig(
       logState => logState.logs.length >= 100,
       logState =>
         Effect.forEach(logState.logs, ({ level, ...logData }) =>
           Effect.logWithLevel(level, logData)
         ),
-      LoggingConfig.flushAllOnError,
+      ObserveLoggingConfig.flushAllOnError,
       LogLevel.Info,
       Logger.withMinimumLogLevel(LogLevel.Debug)
     );
 
   static make = (
-    flush: (logs: LogStateData) => Effect.Effect<void, never, never>
-  ): LoggingConfig => LoggingConfig.default().withFlush(flush);
+    flush: (logs: ObserveLogStateData) => Effect.Effect<void, never, never>
+  ): ObserveLoggingConfig => ObserveLoggingConfig.default().withFlush(flush);
 }
 
-export type LogStateData = {
-  logs: LogData[];
-  context: LogData;
+export type ObserveLogStateData = {
+  logs: ObserveLogData[];
+  context: ObserveLogData;
 };
 
 const maxLevel = (a: LogLevel.LogLevel, b: LogLevel.LogLevel) =>
   a.ordinal >= b.ordinal ? (a === LogLevel.None ? b : a) : b;
 
-class LogState extends Context.Tag("LogState")<
-  LogState,
-  { logState: Ref.Ref<LogStateData>; loggingConfig: LoggingConfig }
+class ObserveLogState extends Context.Tag("LogState")<
+  ObserveLogState,
+  {
+    logState: Ref.Ref<ObserveLogStateData>;
+    loggingConfig: ObserveLoggingConfig;
+  }
 >() {
   public static appendLog = (
-    logged: Logged<any>
-  ): Effect.Effect<{}, never, LogState> =>
-    LogState.pipe(
+    logged: Observed<any>
+  ): Effect.Effect<{}, never, ObserveLogState> =>
+    ObserveLogState.pipe(
       Effect.tap(ls =>
         Ref.update(ls.logState, data => ({
           context: {
@@ -156,14 +169,14 @@ class LogState extends Context.Tag("LogState")<
       Effect.bind("logs", ({ ls }) => Ref.get(ls.logState)),
       Effect.flatMap(({ ls, logs }) =>
         ls.loggingConfig.autoFlush(logs)
-          ? LogState.flushLogs()
+          ? ObserveLogState.flushLogs()
           : Effect.succeed({})
       )
     );
 
-  public static flushLogs = (): Effect.Effect<{}, never, LogState> =>
+  public static flushLogs = (): Effect.Effect<{}, never, ObserveLogState> =>
     Effect.Do.pipe(
-      Effect.bind("ls", () => LogState),
+      Effect.bind("ls", () => ObserveLogState),
       Effect.bind("logs", ({ ls }) => Ref.get(ls.logState)),
       Effect.bind("_flushed", ({ ls, logs }) =>
         ls.loggingConfig
@@ -177,13 +190,17 @@ class LogState extends Context.Tag("LogState")<
     );
 
   public static getLogState = (): Effect.Effect<
-    LogStateData,
+    ObserveLogStateData,
     never,
-    LogState
-  > => LogState.pipe(Effect.flatMap(ls => Ref.get(ls.logState)));
+    ObserveLogState
+  > => ObserveLogState.pipe(Effect.flatMap(ls => Ref.get(ls.logState)));
 
-  public static getLogs = (): Effect.Effect<FmtLogData[], never, LogState> =>
-    LogState.getLogState().pipe(Effect.map(x => x.logs.map(fmtLogData)));
+  public static getLogs = (): Effect.Effect<
+    FmtLogData[],
+    never,
+    ObserveLogState
+  > =>
+    ObserveLogState.getLogState().pipe(Effect.map(x => x.logs.map(fmtLogData)));
 }
 
 export interface SafeToLogError {
@@ -214,7 +231,7 @@ export class SafeToLogOf<A> extends Pipeable.Class() implements SafeToLog<A> {
   toLogSafeString = (): string => this.toLogSafeString_(this.value);
 }
 
-type LogData = {
+type ObserveLogData = {
   message: string;
   level: LogLevel.LogLevel;
   aux: Record<string, unknown>;
@@ -241,19 +258,22 @@ export class LogMsg {
     });
 }
 
-export interface Logged<A> {
-  logData: LogData;
+export interface Observed<A> {
+  logData: ObserveLogData;
   value: SafeToLog<A>;
 }
 
 export class Obs<A> extends Pipeable.Class() {
   private type: "Obs" = "Obs";
 
-  private constructor(public logData: LogData, public value: SafeToLog<A>) {
+  private constructor(
+    public logData: ObserveLogData,
+    public value: SafeToLog<A>
+  ) {
     super();
   }
 
-  static fromLogData = (logData: LogData): Obs<{}> =>
+  static fromLogData = (logData: ObserveLogData): Obs<{}> =>
     new Obs(logData, new Unit());
 
   static log = (msg: string): LogMsg => new LogMsg(msg);
@@ -280,7 +300,8 @@ export class Obs<A> extends Pipeable.Class() {
 
   handleError = <E extends SafeToLogError | never>(
     handleErr: (e: unknown) => E
-  ): ObsErr<A, E> => ObsErr.make(this.logData, this.value, handleErr);
+  ): ObsWithErrHandler<A, E> =>
+    ObsWithErrHandler.make(this.logData, this.value, handleErr);
 
   runEffect = <B, E extends SafeToLogError | never, R>(
     f: (a: A) => Effect.Effect<B, E, R>
@@ -288,9 +309,9 @@ export class Obs<A> extends Pipeable.Class() {
     new Observe(() =>
       pipe(
         f(this.value.value),
-        Effect.tap(_ => LogState.appendLog(this)),
+        Effect.tap(_ => ObserveLogState.appendLog(this)),
         Effect.tapError(error =>
-          LogState.appendLog(
+          ObserveLogState.appendLog(
             this.withLevel(LogLevel.Error).withAux({
               error: error.toLogSafeString(),
             })
@@ -310,7 +331,7 @@ export class Obs<A> extends Pipeable.Class() {
 
   static toEffect = <A, E extends SafeToLogError | never, R>(
     self: Observe<A, E, R>
-  ): Effect.Effect<A, E, R | LogState> => self.run();
+  ): Effect.Effect<A, E, R | ObserveLogState> => self.run();
 
   static map =
     <A, B, E extends SafeToLogError | never, R>(f: (x: A) => B) =>
@@ -338,7 +359,7 @@ export class Obs<A> extends Pipeable.Class() {
       new Observe(() => eff.run().pipe(Effect.bind(name, x => f(x).run())));
 
   static fromEffect = <R, E extends SafeToLogError | never, A>(
-    effect: Effect.Effect<A, E, R | LogState>
+    effect: Effect.Effect<A, E, R | ObserveLogState>
   ): Observe<A, E, R> => new Observe(() => effect);
 
   static mapEffect =
@@ -351,24 +372,24 @@ export class Obs<A> extends Pipeable.Class() {
       R2
     >(
       map: (
-        x: Effect.Effect<A, E, R | LogState>
-      ) => Effect.Effect<B, E2, R2 | LogState>
+        x: Effect.Effect<A, E, R | ObserveLogState>
+      ) => Effect.Effect<B, E2, R2 | ObserveLogState>
     ) =>
     (self: Observe<A, E, R>): Observe<B, E2, R2> =>
       self.mapEffect(map);
 
   static toPromise =
     <E extends SafeToLogError | never, A>(
-      logged: Logged<{}>,
-      loggingConfig: LoggingConfig = LoggingConfig.default()
+      logged: Observed<{}>,
+      loggingConfig: ObserveLoggingConfig = ObserveLoggingConfig.default()
     ) =>
-    (trk: Observe<A, E, LogState>): Promise<A> =>
+    (trk: Observe<A, E, ObserveLogState>): Promise<A> =>
       trk.run().pipe(
         Effect.either,
-        Effect.tap(_ => LogState.flushLogs()),
+        Effect.tap(_ => ObserveLogState.flushLogs()),
         Effect.provideServiceEffect(
-          LogState,
-          Ref.make<LogStateData>({
+          ObserveLogState,
+          Ref.make<ObserveLogStateData>({
             context: logged.logData,
             logs: [],
           }).pipe(Effect.map(ls => ({ logState: ls, loggingConfig })))
@@ -380,10 +401,13 @@ export class Obs<A> extends Pipeable.Class() {
       );
 }
 
-class ObsErr<A, E extends SafeToLogError | never> extends Pipeable.Class() {
-  private type: "ObsErr" = "ObsErr";
+class ObsWithErrHandler<
+  A,
+  E extends SafeToLogError | never
+> extends Pipeable.Class() {
+  private type: "ObsWithErrHandler" = "ObsWithErrHandler";
   private constructor(
-    public logData: LogData,
+    public logData: ObserveLogData,
     public value: SafeToLog<A>,
     public handleErr: (e: unknown) => E
   ) {
@@ -391,10 +415,10 @@ class ObsErr<A, E extends SafeToLogError | never> extends Pipeable.Class() {
   }
 
   static make = <A, E extends SafeToLogError | never>(
-    logData: LogData,
+    logData: ObserveLogData,
     value: SafeToLog<A>,
     handleErr: (e: unknown) => E
-  ) => new ObsErr(logData, value, handleErr);
+  ) => new ObsWithErrHandler(logData, value, handleErr);
 
   toObs = (): Obs<A> => Obs.fromLogData(this.logData).withInput(this.value);
 
@@ -417,13 +441,13 @@ class ObsErr<A, E extends SafeToLogError | never> extends Pipeable.Class() {
 
 class Observe<A, E extends SafeToLogError | never, R> extends Pipeable.Class() {
   private type: "Observe" = "Observe";
-  constructor(public run: () => Effect.Effect<A, E, R | LogState>) {
+  constructor(public run: () => Effect.Effect<A, E, R | ObserveLogState>) {
     super();
   }
 
   mapEffect = <B, E2 extends SafeToLogError | never, R2>(
     map: (
-      x: Effect.Effect<A, E, R | LogState>
-    ) => Effect.Effect<B, E2, R2 | LogState>
+      x: Effect.Effect<A, E, R | ObserveLogState>
+    ) => Effect.Effect<B, E2, R2 | ObserveLogState>
   ): Observe<B, E2, R2> => new Observe(() => map(this.run()));
 }
