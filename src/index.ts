@@ -124,8 +124,9 @@ export class ObserveLoggingConfig {
     new ObserveLoggingConfig(
       logState => logState.logs.length >= 100,
       logState =>
-        Effect.forEach(logState.logs, ({ level, ...logData }) =>
-          Effect.logWithLevel(level, logData)
+        Effect.forEach(
+          [...logState.logs, logState.context],
+          ({ level, ...logData }) => Effect.logWithLevel(level, logData)
         ),
       ObserveLoggingConfig.flushAllOnError,
       LogLevel.Info,
@@ -411,6 +412,8 @@ export class Obs<A> extends Pipeable.Class() {
         Effect.provide(Logger.json),
         loggingConfig.configureEffect,
         Effect.flatMap(x => x),
+        Effect.annotateLogs(toLogData(logged).aux ?? {}),
+        Effect.withSpan(logged.logData.span),
         Effect.runPromise
       );
 }
