@@ -397,7 +397,6 @@ export class Obs<A> extends Pipeable.Class() {
         Effect.provide(Logger.json),
         loggingConfig.configureEffect,
         Effect.flatMap(x => x),
-        Effect.annotateLogs(toLogData(logged).aux ?? {}),
         Effect.withSpan(logged.logData.span),
         Effect.runPromise
       );
@@ -459,8 +458,8 @@ export class Observe<
   ): Observe<B, E, R> =>
     new Observe(() =>
       pipe(
-        f(obs.value.value),
-        Effect.tap(_ => ObserveLogState.appendLog(obs)),
+        ObserveLogState.appendLog(obs),
+        Effect.flatMap(_ => f(obs.value.value)),
         Effect.tapError(error =>
           ObserveLogState.appendLog(
             obs.withLevel(LogLevel.Error).withAux({
@@ -468,12 +467,10 @@ export class Observe<
             })
           )
         ),
-        Effect.tap(_ =>
-          Effect.forEach(Object.entries(toLogData(obs).aux ?? {}), ([k, v]) =>
-            Effect.annotateCurrentSpan(k, v)
-          )
+        Effect.tap(_ => Effect.annotateCurrentSpan(toLogData(obs).aux ?? {})),
+        Effect.tapError(_ =>
+          Effect.annotateCurrentSpan(toLogData(obs).aux ?? {})
         ),
-        Effect.annotateLogs(toLogData(obs).aux ?? {}),
         Effect.withSpan(obs.logData.span)
       )
     );
