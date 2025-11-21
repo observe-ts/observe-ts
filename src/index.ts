@@ -145,7 +145,7 @@ export type ObserveLogStateData = {
 const maxLevel = (a: LogLevel.LogLevel, b: LogLevel.LogLevel) =>
   a.ordinal >= b.ordinal ? (a === LogLevel.None ? b : a) : b;
 
-class ObserveLogState extends Context.Tag("LogState")<
+export class ObserveLogState extends Context.Tag("LogState")<
   ObserveLogState,
   {
     logState: Ref.Ref<ObserveLogStateData>;
@@ -231,7 +231,7 @@ export class SafeToLogOf<A> extends Pipeable.Class() implements SafeToLog<A> {
   toLogSafeString = (): string => this.toLogSafeString_(this.value);
 }
 
-type ObserveLogData = {
+export type ObserveLogData = {
   message: string;
   level: LogLevel.LogLevel;
   aux: Record<string, unknown>;
@@ -338,6 +338,20 @@ export class Obs<A> extends Pipeable.Class() {
     (self: Observe<A, E, R>): Observe<B, E, R> =>
       self.mapEffect(x => x.pipe(Effect.map(f)));
 
+  static flatMap =
+    <
+      A,
+      B,
+      E extends SafeToLogError | never,
+      E2 extends SafeToLogError | never,
+      R,
+      R2
+    >(
+      f: (x: A) => Observe<B, E2, R2>
+    ) =>
+    (self: Observe<A, E, R>): Observe<B, E | E2, R | R2> =>
+      new Observe(() => self.run().pipe(Effect.flatMap(x => f(x).run())));
+
   static override bind =
     <
       K extends string,
@@ -401,7 +415,7 @@ export class Obs<A> extends Pipeable.Class() {
       );
 }
 
-class ObsWithErrHandler<
+export class ObsWithErrHandler<
   A,
   E extends SafeToLogError | never
 > extends Pipeable.Class() {
@@ -439,7 +453,11 @@ class ObsWithErrHandler<
     );
 }
 
-class Observe<A, E extends SafeToLogError | never, R> extends Pipeable.Class() {
+export class Observe<
+  A,
+  E extends SafeToLogError | never,
+  R
+> extends Pipeable.Class() {
   private type: "Observe" = "Observe";
   constructor(public run: () => Effect.Effect<A, E, R | ObserveLogState>) {
     super();
