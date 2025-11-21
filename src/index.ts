@@ -305,37 +305,15 @@ export class Obs<A> extends Pipeable.Class() {
   ): ObsWithErrHandler<A, E> =>
     ObsWithErrHandler.make(this.logData, this.value, handleErr);
 
-  // TODO - this belongs in the constructor for Observe
-  // otherwise it is possible to miss out on all this good stuff
   runEffect = <B, E extends SafeToLogError | never, R>(
     f: (a: A) => Effect.Effect<B, E, R | ObserveLogState>
-  ): Observe<B, E, R> =>
-    new Observe(() =>
-      pipe(
-        f(this.value.value),
-        Effect.tap(_ => ObserveLogState.appendLog(this)),
-        Effect.tapError(error =>
-          ObserveLogState.appendLog(
-            this.withLevel(LogLevel.Error).withAux({
-              error: error.toLogSafeString(),
-            })
-          )
-        ),
-        Effect.tap(_ =>
-          Effect.forEach(Object.entries(toLogData(this).aux ?? {}), ([k, v]) =>
-            Effect.annotateCurrentSpan(k, v)
-          )
-        ),
-        Effect.annotateLogs(toLogData(this).aux ?? {}),
-        Effect.withSpan(this.logData.span)
-      )
-    );
+  ): Observe<B, E, R> => Observe.runEffect(this, f);
 
   runObserve = <B, E extends SafeToLogError | never, R>(
     f: (a: A) => Observe<B, E, R>
   ): Observe<B, E, R> => this.runEffect(x => f(x).pipe(Obs.toEffect));
 
-  static Do = () => new Observe(() => Effect.Do);
+  static Do = () => Observe.fromEffect(Effect.Do);
 
   static toEffect = <A, E extends SafeToLogError | never, R>(
     self: Observe<A, E, R>
@@ -358,7 +336,7 @@ export class Obs<A> extends Pipeable.Class() {
       f: (x: A) => Observe<B, E2, R2>
     ) =>
     (self: Observe<A, E, R>): Observe<B, E | E2, R | R2> =>
-      new Observe(() => self.run().pipe(Effect.flatMap(x => f(x).run())));
+      Observe.fromEffect(self.run().pipe(Effect.flatMap(x => f(x).run())));
 
   static override bind =
     <
@@ -378,11 +356,11 @@ export class Obs<A> extends Pipeable.Class() {
       E2 | E,
       R2 | R
     > =>
-      new Observe(() => eff.run().pipe(Effect.bind(name, x => f(x).run())));
+      Observe.fromEffect(eff.run().pipe(Effect.bind(name, x => f(x).run())));
 
   static fromEffect = <R, E extends SafeToLogError | never, A>(
     effect: Effect.Effect<A, E, R | ObserveLogState>
-  ): Observe<A, E, R> => new Observe(() => effect);
+  ): Observe<A, E, R> => Observe.fromEffect(effect);
 
   static mapEffect =
     <
@@ -469,9 +447,40 @@ export class Observe<
   R
 > extends Pipeable.Class() {
   private type: "Observe" = "Observe";
-  constructor(public run: () => Effect.Effect<A, E, R | ObserveLogState>) {
+  private constructor(
+    public run: () => Effect.Effect<A, E, R | ObserveLogState>
+  ) {
     super();
   }
+
+  static runEffect = <A, B, E extends SafeToLogError | never, R>(
+    obs: Obs<A>,
+    f: (a: A) => Effect.Effect<B, E, R | ObserveLogState>
+  ): Observe<B, E, R> =>
+    new Observe(() =>
+      pipe(
+        f(obs.value.value),
+        Effect.tap(_ => ObserveLogState.appendLog(obs)),
+        Effect.tapError(error =>
+          ObserveLogState.appendLog(
+            obs.withLevel(LogLevel.Error).withAux({
+              error: error.toLogSafeString(),
+            })
+          )
+        ),
+        Effect.tap(_ =>
+          Effect.forEach(Object.entries(toLogData(obs).aux ?? {}), ([k, v]) =>
+            Effect.annotateCurrentSpan(k, v)
+          )
+        ),
+        Effect.annotateLogs(toLogData(obs).aux ?? {}),
+        Effect.withSpan(obs.logData.span)
+      )
+    );
+
+  static fromEffect = <R, E extends SafeToLogError | never, A>(
+    effect: Effect.Effect<A, E, R | ObserveLogState>
+  ): Observe<A, E, R> => new Observe(() => effect);
 
   mapEffect = <B, E2 extends SafeToLogError | never, R2>(
     map: (
