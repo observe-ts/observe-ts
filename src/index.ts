@@ -120,6 +120,7 @@ export class ObserveLoggingConfig {
       logs => ({ ...logState, logs })
     );
 
+  // TODO - timestamps on logdata
   static default = (): ObserveLoggingConfig =>
     new ObserveLoggingConfig(
       logState => logState.logs.length >= 100,
@@ -304,8 +305,10 @@ export class Obs<A> extends Pipeable.Class() {
   ): ObsWithErrHandler<A, E> =>
     ObsWithErrHandler.make(this.logData, this.value, handleErr);
 
+  // TODO - this belongs in the constructor for Observe
+  // otherwise it is possible to miss out on all this good stuff
   runEffect = <B, E extends SafeToLogError | never, R>(
-    f: (a: A) => Effect.Effect<B, E, R>
+    f: (a: A) => Effect.Effect<B, E, R | ObserveLogState>
   ): Observe<B, E, R> =>
     new Observe(() =>
       pipe(
@@ -327,6 +330,10 @@ export class Obs<A> extends Pipeable.Class() {
         Effect.withSpan(this.logData.span)
       )
     );
+
+  runObserve = <B, E extends SafeToLogError | never, R>(
+    f: (a: A) => Observe<B, E, R>
+  ): Observe<B, E, R> => this.runEffect(x => f(x).pipe(Obs.toEffect));
 
   static Do = () => new Observe(() => Effect.Do);
 
