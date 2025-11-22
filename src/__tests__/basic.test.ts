@@ -1,11 +1,34 @@
+import { NodeSDK } from "@opentelemetry/sdk-node";
+import { SimpleSpanProcessor } from "@opentelemetry/sdk-trace-base";
+import { ConsoleSpanExporter } from "@opentelemetry/sdk-trace-node";
+import { resourceFromAttributes } from "@opentelemetry/resources";
 import { Effect, LogLevel, pipe } from "effect";
-import { describe, it, expect } from "vitest";
+import { afterAll, beforeAll, describe, it, expect } from "vitest";
 import { Obs, SafeToLog, SafeToLogError } from "../index";
+import { trace } from "@opentelemetry/api";
+import { NodeSdk } from "@effect/opentelemetry";
+
+const sdk = new NodeSDK({
+  resource: resourceFromAttributes({
+    "service.name": "observable-ts",
+    "service.version": "0.0.1",
+  }),
+  traceExporter: new ConsoleSpanExporter(),
+});
+
+beforeAll(async () => {
+  console.log("starting sdk");
+  await sdk.start();
+});
+
+afterAll(async () => {
+  await sdk.shutdown();
+});
 
 class MyArg implements SafeToLog<string> {
-  constructor(public readonly value: string) {}
+  constructor(public readonly value: () => string) {}
 
-  toLogSafeString = () => `MyArg(${this.value})`;
+  safeToLog = () => ({ argType: "MyArg", argValue: this.value() });
 }
 
 class MyError extends Error implements SafeToLogError {
@@ -13,10 +36,19 @@ class MyError extends Error implements SafeToLogError {
     super(`MyError(${value})`);
   }
 
-  toLogSafeString = () => `MyErr(${this.value})`;
+  safeToLog = () => ({
+    errorType: "MyError",
+    errorValue: `${this.value}`,
+    errorMessage: this.message,
+  });
 }
 
 describe("Obs", () => {
+  it("debug OTEL", () => {
+    const tracer = trace.getTracer("debug");
+    const span = tracer.startSpan("manual-span");
+    span.end();
+  });
   it("Builds an observed effect carrier", async () => {
     const result = await Obs.Do().pipe(
       Obs.bind("step1", () =>
@@ -26,7 +58,10 @@ describe("Obs", () => {
           .withInput(
             pipe(
               ["hi", "there"],
-              SafeToLog.make(s => `OnTheFly(${s})`)
+              SafeToLog.make(s => ({
+                inputType: "OnTheFly",
+                inputValue: s,
+              }))
             )
           )
           .runEffect(strs =>
@@ -37,13 +72,13 @@ describe("Obs", () => {
                     Obs.bind("s1", () =>
                       Obs.log("traversing step 1")
                         .withSpan("traversing.step1")
-                        .withInput(new MyArg(s))
+                        .withInput(new MyArg(() => s))
                         .runEffect(Effect.succeed)
                     ),
                     Obs.bind("s2", ({ s1 }) =>
                       Obs.log("traversing step 2")
                         .withSpan("traversing.step2")
-                        .withInput(new MyArg(`${s1} again`))
+                        .withInput(new MyArg(() => `${s1} again`))
                         .runEffect(Effect.succeed)
                     ),
                     Obs.map(({ s2 }) => s2)
@@ -58,7 +93,7 @@ describe("Obs", () => {
         Obs.log("test")
           .withSpan("test")
           .withLevel(LogLevel.Warning)
-          .withInput(new MyArg(step1.join(",")))
+          .withInput(new MyArg(() => step1.join(",")))
           .handleError(e => new MyError(e))
           .runTry(x => {
             throw new Error(x);

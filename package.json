@@ -1,6 +1,6 @@
 {
   "name": "observe-ts",
-  "version": "0.1.7",
+  "version": "0.2.0",
   "description": "Deps, errors, logs, traces all tracked for all code",
   "license": "Apache-2.0",
   "repository": {
@@ -42,16 +42,28 @@
     "typecheck": "tsc --noEmit"
   },
   "peerDependencies": {
+    "@effect/opentelemetry": "^0.59.1",
+    "@opentelemetry/sdk-metrics": "^2.2.0",
+    "@opentelemetry/sdk-trace-base": "^2.2.0",
+    "@opentelemetry/sdk-trace-node": "^2.2.0",
+    "@opentelemetry/sdk-trace-web": "^2.2.0",
     "effect": "^3.19.5"
   },
   "devDependencies": {
+    "@effect/opentelemetry": "^0.59.1",
+    "@opentelemetry/sdk-logs": "^0.203.0",
+    "@opentelemetry/sdk-metrics": "^2.2.0",
+    "@opentelemetry/sdk-node": "^0.208.0",
+    "@opentelemetry/sdk-trace-base": "^2.2.0",
+    "@opentelemetry/sdk-trace-node": "^2.2.0",
+    "@opentelemetry/sdk-trace-web": "^2.2.0",
     "@types/node": "^20.11.30",
     "effect": "^3.19.5",
+    "rimraf": "^5.0.5",
     "tsup": "^8.0.1",
     "tsx": "^4.7.0",
     "typescript": "^5.4.5",
-    "vitest": "^1.6.0",
-    "rimraf": "^5.0.5"
+    "vitest": "^1.6.0"
   },
   "engines": {
     "node": ">=18.17"
