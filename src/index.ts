@@ -8,8 +8,30 @@ import {
   Pipeable,
   pipe,
   Logger,
+  Tracer as EffectTracer,
 } from "effect";
 import { Tracer, Resource } from "@effect/opentelemetry";
+
+export const NoopTracer = EffectTracer.make({
+  span: () => ({
+    _tag: "Span",
+    name: "",
+    spanId: "",
+    traceId: "",
+    parent: Option.none(),
+    context: Context.empty(),
+    status: { code: "UNSET" } as any,
+    attributes: new Map<string, unknown>(),
+    links: [],
+    sampled: false,
+    kind: "internal" as const,
+    end(): void {},
+    attribute(): void {},
+    event(): void {},
+    addLinks(): void {},
+  }),
+  context: f => f(),
+});
 
 export type FmtLogData = Omit<ObserveLogData, "level"> & {
   level: string;
@@ -385,6 +407,11 @@ export class Obs<A> extends Pipeable.Class() {
       R2 | R
     > =>
       Observe.fromEffect(eff.run().pipe(Effect.bind(name, x => f(x).run())));
+
+  static silenceSpans = <A, E extends SafeToLogError | never, R>(
+    self: Observe<A, E, R>
+  ): Observe<A, E, R> =>
+    self.pipe(Obs.mapEffect(Effect.withTracer(NoopTracer)));
 
   static fromEffect = <R, E extends SafeToLogError | never, A>(
     effect: Effect.Effect<A, E, R | ObserveLogState>

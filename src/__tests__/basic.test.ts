@@ -83,6 +83,7 @@ describe("Obs", () => {
                     ),
                     Obs.map(({ s2 }) => s2)
                   ),
+                  Obs.silenceSpans,
                   Obs.toEffect
                 )
               )
