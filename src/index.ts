@@ -9,6 +9,7 @@ import {
   pipe,
   Logger,
   Tracer as EffectTracer,
+  HashMap,
 } from "effect";
 import { Tracer, Resource } from "@effect/opentelemetry";
 
@@ -42,11 +43,17 @@ const fmtLogData = (data: ObserveLogData): FmtLogData => ({
   level: data.level.label,
 });
 
-const toLogData = <A>(logged: Observed<A>): ObserveLogData => ({
+const toLogData = <A>(
+  logged: Observed<A>,
+  annotations?: HashMap.HashMap<string, unknown>
+): ObserveLogData => ({
   ...logged.logData,
   aux: {
     arg: logged.value.safeToLog(),
     ...logged.logData.aux,
+    ...(annotations
+      ? { annotations: Object.fromEntries(HashMap.toEntries(annotations)) }
+      : {}),
   },
 });
 
@@ -192,6 +199,8 @@ export type ObserveLogStateData = {
 const maxLevel = (a: LogLevel.LogLevel, b: LogLevel.LogLevel) =>
   a.ordinal >= b.ordinal ? (a === LogLevel.None ? b : a) : b;
 
+// TODO - consider restructure to demote context from
+// implying a fiber safe top level state
 export class ObserveLogState extends Context.Tag("LogState")<
   ObserveLogState,
   {
@@ -202,17 +211,18 @@ export class ObserveLogState extends Context.Tag("LogState")<
   public static appendLog = (
     logged: Observed<any>
   ): Effect.Effect<{}, never, ObserveLogState> =>
-    ObserveLogState.pipe(
-      Effect.tap(ls =>
+    Effect.Do.pipe(
+      Effect.bind("ls", () => ObserveLogState),
+      Effect.bind("annotations", () => Effect.logAnnotations),
+      Effect.tap(({ ls, annotations }) =>
         Ref.update(ls.logState, data => ({
           context: {
             ...data.context,
             level: maxLevel(logged.logData.level, data.context.level),
           },
-          logs: [...data.logs, toLogData(logged)],
+          logs: [...data.logs, toLogData(logged, annotations)],
         }))
       ),
-      Effect.bindTo("ls"),
       Effect.bind("logs", ({ ls }) => Ref.get(ls.logState)),
       Effect.flatMap(({ ls, logs }) =>
         ls.loggingConfig.autoFlush(logs)
@@ -470,6 +480,13 @@ export class Obs<A> extends Pipeable.Class() {
         loggingConfig.configureEffect,
         Effect.runPromise
       );
+
+  static annotate =
+    (annotations: Record<string, string>) =>
+    <A, E extends SafeToLogError | never, R>(
+      obs: Observe<A, E, R>
+    ): Observe<A, E, R> =>
+      obs.mapEffect(Effect.annotateLogs(annotations));
 }
 
 export class ObsWithErrHandler<

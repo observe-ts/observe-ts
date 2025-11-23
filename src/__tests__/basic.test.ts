@@ -1,12 +1,10 @@
 import { NodeSDK } from "@opentelemetry/sdk-node";
-import { SimpleSpanProcessor } from "@opentelemetry/sdk-trace-base";
 import { ConsoleSpanExporter } from "@opentelemetry/sdk-trace-node";
 import { resourceFromAttributes } from "@opentelemetry/resources";
 import { Effect, LogLevel, pipe } from "effect";
 import { afterAll, beforeAll, describe, it, expect } from "vitest";
 import { Obs, SafeToLog, SafeToLogError } from "../index";
 import { trace } from "@opentelemetry/api";
-import { NodeSdk } from "@effect/opentelemetry";
 
 const sdk = new NodeSDK({
   resource: resourceFromAttributes({
@@ -101,9 +99,8 @@ describe("Obs", () => {
           })
       ),
       Obs.map(({ step2 }) => step2),
-      Obs.toEffect,
-      Effect.catchAll(x => Effect.succeed(`${x.value}`)),
-      Obs.fromEffect,
+      Obs.annotate({ test: "annotation" }),
+      Obs.mapEffect(Effect.catchAll(x => Effect.succeed(`${x.value}`))),
       Obs.toPromise(Obs.log("run the test").withSpan("run_the_test"))
     );
     expect(result).toBe("Error: hi again,there again");

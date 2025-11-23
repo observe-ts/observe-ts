@@ -1,6 +1,6 @@
 {
   "name": "observe-ts",
-  "version": "0.2.4",
+  "version": "0.2.5",
   "description": "Deps, errors, logs, traces all tracked for all code",
   "license": "Apache-2.0",
   "repository": {
