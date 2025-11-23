@@ -271,6 +271,11 @@ export const SafeToLog = {
     <A>(a: SafeToLogOf<A>) =>
       a.tag(key),
 
+  tagged:
+    <A>(key: string, f: (value: A) => string | Record<string, unknown>) =>
+    (a: A) =>
+      pipe(a, SafeToLog.make(f), SafeToLog.tag(key)),
+
   map: <A, B>(a: SafeToLog<A>, f: (x: A) => B): SafeToLog<B> =>
     new SafeToLogOf(() => f(a.value()), a.safeToLog),
 };
