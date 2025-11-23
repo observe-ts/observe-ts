@@ -266,6 +266,11 @@ export const SafeToLog = {
     (a: A) =>
       new SafeToLogOf(() => a, f),
 
+  tag:
+    (key: string) =>
+    <A>(a: SafeToLogOf<A>) =>
+      a.tag(key),
+
   map: <A, B>(a: SafeToLog<A>, f: (x: A) => B): SafeToLog<B> =>
     new SafeToLogOf(() => f(a.value()), a.safeToLog),
 };
@@ -281,6 +286,12 @@ export class SafeToLogOf<A> extends Pipeable.Class() implements SafeToLog<A> {
 
   safeToLog = (): string | Record<string, unknown> =>
     this.safeToLog_(this.value());
+
+  tag = (key: string): SafeToLogOf<A> =>
+    new SafeToLogOf(
+      () => this.value(),
+      value => ({ [key]: this.safeToLog_(value) })
+    );
 }
 
 export type ObserveLogData = {
