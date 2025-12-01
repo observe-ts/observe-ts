@@ -467,7 +467,6 @@ export class Obs<A> extends Pipeable.Class() {
     (trk: Observe<A, E, ObserveLogState>): Promise<A> =>
       trk.run().pipe(
         Effect.either,
-        Effect.flatMap(x => x),
         Effect.withSpan(logged.logData.span),
         Effect.tap(_ => ObserveLogState.flushLogs()),
         Effect.provideServiceEffect(
@@ -478,6 +477,7 @@ export class Obs<A> extends Pipeable.Class() {
           }).pipe(Effect.map(ls => ({ logState: ls, loggingConfig })))
         ),
         loggingConfig.configureEffect,
+        Effect.flatMap(x => x),
         Effect.runPromise
       );
 

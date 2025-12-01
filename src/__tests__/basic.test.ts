@@ -79,6 +79,7 @@ describe("Obs", () => {
                         .withInput(new MyArg(() => `${s1} again`))
                         .runEffect(Effect.succeed)
                     ),
+                    Obs.annotate({ test: "traverse" }),
                     Obs.map(({ s2 }) => s2)
                   ),
                   Obs.silenceSpans,
