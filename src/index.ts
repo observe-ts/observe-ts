@@ -439,9 +439,12 @@ export class Obs<A> extends Pipeable.Class() {
   ): Observe<A, E, R> =>
     self.pipe(Obs.mapEffect(Effect.withTracer(NoopTracer)));
 
-  static fromEffect = <R, E extends SafeToLogError | never, A>(
-    effect: Effect.Effect<A, E, R | ObserveLogState>
-  ): Observe<A, E, R> => Observe.fromEffect(effect);
+  static fromEffect =
+    (logged: Obs<{}>) =>
+    <R, E extends SafeToLogError | never, A>(
+      effect: Effect.Effect<A, E, R | ObserveLogState>
+    ): Observe<A, E, R> =>
+      logged.runEffect(() => effect);
 
   static mapEffect =
     <
