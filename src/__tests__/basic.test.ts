@@ -3,7 +3,7 @@ import { ConsoleSpanExporter } from "@opentelemetry/sdk-trace-node";
 import { resourceFromAttributes } from "@opentelemetry/resources";
 import { Effect, LogLevel, pipe } from "effect";
 import { afterAll, beforeAll, describe, it, expect } from "vitest";
-import { Obs, SafeToLog, SafeToLogError } from "../index";
+import { Obs, ObserveLoggingConfig, SafeToLog, SafeToLogError } from "../index";
 import { trace } from "@opentelemetry/api";
 
 const sdk = new NodeSDK({
@@ -73,6 +73,9 @@ describe("Obs", () => {
                         .withInput(new MyArg(() => s))
                         .runEffect(Effect.succeed)
                     ),
+                    Obs.mapEffect(x =>
+                      x.pipe(Effect.tap(() => Effect.sleep(100)))
+                    ),
                     Obs.bind("s2", ({ s1 }) =>
                       Obs.log("traversing step 2")
                         .withSpan("traversing.step2")
@@ -89,7 +92,7 @@ describe("Obs", () => {
             )
           )
       ),
-      Obs.bind("step2", ({ step1 }) =>
+      /*Obs.bind("step2", ({ step1 }) =>
         Obs.log("test")
           .withSpan("test")
           .withLevel(LogLevel.Warning)
@@ -98,10 +101,21 @@ describe("Obs", () => {
           .runTry(x => {
             throw new Error(x);
           })
+      ),*/
+      Obs.mapEffect(x => x.pipe(Effect.tap(() => Effect.log("tapped!")))),
+      Obs.mapEffect(x =>
+        x.pipe(
+          Effect.flatMap(_ =>
+            Effect.fail(new MyError("boom"))
+              .pipe
+              //Obs.fromEffect(Obs.log("fail w effect").withSpan("fail.w.effect"))
+              ()
+          )
+        )
       ),
       Obs.map(({ step2 }) => step2),
       Obs.annotate({ test: "annotation" }),
-      Obs.mapEffect(Effect.catchAll(x => Effect.succeed(`${x.value}`))),
+      //Obs.mapEffect(Effect.catchAll(x => Effect.succeed(`${x.value}`))),
       Obs.toPromise(Obs.log("run the test").withSpan("run_the_test"))
     );
     expect(result).toBe("Error: hi again,there again");

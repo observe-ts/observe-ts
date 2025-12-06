@@ -166,7 +166,30 @@ export class ObserveLoggingConfig {
       logs => ({ ...logState, logs })
     );
 
-  // TODO - timestamps on logdata
+  static fmtEffectLogLine = ({
+    message,
+    ...log
+  }: Logger.Logger.Options<unknown>): Logger.Logger.Options<unknown> => ({
+    ...log,
+    message: Array.isArray(message)
+      ? message.map(m =>
+          m !== null && typeof m === "object" && "timestamp" in m
+            ? (({ timestamp, ...rest }) => rest)(m as any)
+            : m
+        )
+      : message,
+    date: (message as [ObserveLogData])?.[0]?.timestamp ?? log.date,
+  });
+
+  static fmtEffectLogger = <Out>(
+    logger: Logger.Logger<unknown, Out>
+  ): Logger.Logger<unknown, Out> =>
+    Logger.make(log => logger.log(ObserveLoggingConfig.fmtEffectLogLine(log)));
+
+  static jsonLogger = ObserveLoggingConfig.fmtEffectLogger(
+    Logger.withConsoleLog(Logger.jsonLogger)
+  );
+
   static default = (): ObserveLoggingConfig =>
     new ObserveLoggingConfig(
       logState => logState.logs.length >= 100,
@@ -179,7 +202,12 @@ export class ObserveLoggingConfig {
       LogLevel.Info,
       x =>
         x.pipe(
-          Effect.provide(Logger.json),
+          Effect.provide(
+            Logger.replace(
+              Logger.defaultLogger,
+              ObserveLoggingConfig.jsonLogger
+            )
+          ),
           Logger.withMinimumLogLevel(LogLevel.Debug),
           Effect.provide(Tracer.layerGlobal),
           Effect.provide(Resource.layerFromEnv())
@@ -313,7 +341,8 @@ export type ObserveLogData = {
   message: string;
   level: LogLevel.LogLevel;
   aux: Record<string, unknown>;
-  span: string;
+  timestamp: Date;
+  span?: string;
 };
 
 export class Unit implements SafeToLog<{}> {
@@ -332,6 +361,15 @@ export class LogMsg {
       message: this.msg,
       level: LogLevel.Debug,
       span,
+      timestamp: new Date(),
+      aux: {},
+    });
+
+  noSpan = (): Obs<{}> =>
+    Obs.fromLogData({
+      message: this.msg,
+      level: LogLevel.Debug,
+      timestamp: new Date(),
       aux: {},
     });
 }
@@ -398,7 +436,7 @@ export class Obs<A> extends Pipeable.Class() {
   static map =
     <A, B, E extends SafeToLogError | never, R>(f: (x: A) => B) =>
     (self: Observe<A, E, R>): Observe<B, E, R> =>
-      self.mapEffect(x => x.pipe(Effect.map(f)));
+      self.recklesslyMapEffect(x => x.pipe(Effect.map(f)));
 
   static flatMap =
     <
@@ -437,7 +475,7 @@ export class Obs<A> extends Pipeable.Class() {
   static silenceSpans = <A, E extends SafeToLogError | never, R>(
     self: Observe<A, E, R>
   ): Observe<A, E, R> =>
-    self.pipe(Obs.mapEffect(Effect.withTracer(NoopTracer)));
+    self.recklesslyMapEffect(Effect.withTracer(NoopTracer));
 
   static fromEffect =
     (logged: Obs<{}>) =>
@@ -467,10 +505,13 @@ export class Obs<A> extends Pipeable.Class() {
       logged: Observed<{}>,
       loggingConfig: ObserveLoggingConfig = ObserveLoggingConfig.default()
     ) =>
-    (trk: Observe<A, E, ObserveLogState>): Promise<A> =>
-      trk.run().pipe(
+    (obs: Observe<A, E, ObserveLogState>): Promise<A> =>
+      obs.run().pipe(
         Effect.either,
-        Effect.withSpan(logged.logData.span),
+        x =>
+          logged.logData.span
+            ? x.pipe(Effect.withSpan(logged.logData.span))
+            : x,
         Effect.tap(_ => ObserveLogState.flushLogs()),
         Effect.provideServiceEffect(
           ObserveLogState,
@@ -489,7 +530,7 @@ export class Obs<A> extends Pipeable.Class() {
     <A, E extends SafeToLogError | never, R>(
       obs: Observe<A, E, R>
     ): Observe<A, E, R> =>
-      obs.mapEffect(Effect.annotateLogs(annotations));
+      obs.recklesslyMapEffect(Effect.annotateLogs(annotations));
 }
 
 export class ObsWithErrHandler<
@@ -547,8 +588,7 @@ export class Observe<
     f: (a: A) => Effect.Effect<B, E, R | ObserveLogState>
   ): Observe<B, E, R> =>
     new Observe(() =>
-      pipe(
-        ObserveLogState.appendLog(obs),
+      ObserveLogState.appendLog(obs).pipe(
         Effect.flatMap(_ => f(obs.value.value())),
         Effect.tapError(error =>
           ObserveLogState.appendLog(
@@ -561,7 +601,7 @@ export class Observe<
         Effect.tapError(_ =>
           Effect.annotateCurrentSpan(toSpanAttributes(obs, _))
         ),
-        Effect.withSpan(obs.logData.span)
+        x => (obs.logData.span ? x.pipe(Effect.withSpan(obs.logData.span)) : x)
       )
     );
 
@@ -570,6 +610,16 @@ export class Observe<
   ): Observe<A, E, R> => new Observe(() => effect);
 
   mapEffect = <B, E2 extends SafeToLogError | never, R2>(
+    map: (
+      x: Effect.Effect<A, E, R | ObserveLogState>
+    ) => Effect.Effect<B, E2, R2 | ObserveLogState>
+  ): Observe<B, E2, R2> =>
+    Obs.log("Unobserved mapEffect")
+      .noSpan()
+      .withLevel(LogLevel.Trace)
+      .runEffect(_ => map(this.run()));
+
+  recklesslyMapEffect = <B, E2 extends SafeToLogError | never, R2>(
     map: (
       x: Effect.Effect<A, E, R | ObserveLogState>
     ) => Effect.Effect<B, E2, R2 | ObserveLogState>
